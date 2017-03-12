@@ -1,19 +1,3 @@
-/*
-Copyright IBM Corp. 2016 All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package main
 
 //WARNING - this chaincode's ID is hard-coded in chaincode_example04 to illustrate one way of
@@ -58,6 +42,11 @@ func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface, function string
         user_B_A = username + "_" + shopB + "_" + shopA
 
         // Write the state to the ledger
+        err = stub.PutState("user", []byte(username))
+        if err != nil {
+                return nil, err
+        }
+
         shops := []string{shopA, shopB}
         shopsBytes, _ := json.Marshal(shops)
 
@@ -214,10 +203,12 @@ func (t *SimpleChaincode) spend(stub shim.ChaincodeStubInterface, args []string)
 func (t *SimpleChaincode) Query(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
         fmt.Println("Query running. Function: " + function)
 
-        //if function == "query" {
+        if function == "query_user" || function == "query" {
                 return t.query_user(stub, args)
-        //}
-
+        } else if function == "query_shop" {
+                return t.query_shop(stub, args)
+        }
+	return []byte("No such function"), nil
 }
 
 func (t *SimpleChaincode) query_user(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
@@ -231,6 +222,78 @@ func (t *SimpleChaincode) query_user(stub shim.ChaincodeStubInterface, args []st
         }
         username = args[0]
         fmt.Println("query_user: got param: " + username )
+
+
+        shopsBytes, err := stub.GetState(username)
+        err = json.Unmarshal(shopsBytes, &shops)
+        if err != nil {
+            fmt.Println("Error unmarshalling user's shops: " + username + "\n--->: " + err.Error())
+            return nil, errors.New("Error unmarshalling user's shops " + username)
+        }
+        shopA = shops[0]
+        shopB = shops[1]
+
+        user_A = username + "_" + shopA
+        user_B = username + "_" + shopB
+
+        user_shop := user_A
+        pointsBytes, err := stub.GetState(user_shop)
+
+        if err != nil {
+                return nil, errors.New("Failed to get state: " + user_shop)
+        }
+        if pointsBytes == nil {
+                return nil, errors.New("Entity not found: " + user_shop)
+        }
+        shopA_points, _ = strconv.Atoi(string(pointsBytes))
+
+
+        user_shop = user_B
+        pointsBytes, err = stub.GetState(user_shop)
+
+        if err != nil {
+                return nil, errors.New("Failed to get state: " + user_shop)
+        }
+        if pointsBytes == nil {
+                return nil, errors.New("Entity not found: " + user_shop)
+        }
+        shopB_points, _ = strconv.Atoi(string(pointsBytes))
+
+        resp:= map[string]int{
+           shopA: shopA_points,
+           shopB:   shopB_points,
+        }
+
+        jsonResp, err := json.Marshal(resp)
+         if err != nil {
+                return nil, errors.New("resp marshal fail" )
+        }
+        fmt.Printf("Query Response:%s\n", jsonResp)
+        return []byte(jsonResp), nil
+}
+
+// 
+// Settle shops' points
+//
+func (t *SimpleChaincode) query_shop(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
+        var username, shopA, shopB, user_A, user_B string
+        var shops []string
+        var shopA_points, shopB_points int  // accumulated points
+        var err error
+
+        if len(args) != 1 {
+                return nil, errors.New("Incorrect number of arguments 2. Expecting: shopA, shopB")
+        }
+        username = "phyllis"
+        shopA = args[0]
+        shopB = args[1]
+        fmt.Println("query_shop: got param: " + shopA + "," + shopB)
+
+        //var user_A_B, user_B_A string
+        user_A = username + "_" + shopA
+        user_B = username + "_" + shopB
+        //user_A_B = username + "_" + shopA + "_" + shopB
+        //user_B_A = username + "_" + shopB + "_" + shopA
 
 
         shopsBytes, err := stub.GetState(username)
